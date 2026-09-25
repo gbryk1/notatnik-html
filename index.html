@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notatnik</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --border: #2a2f3a;
+    --text: #e6e8eb;
+    --text-dim: #9aa2af;
+    --accent: #4f8cff;
+    --accent-hover: #6ea0ff;
+    --danger: #e5484d;
+    --danger-hover: #f16569;
+    --success: #3dd68c;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  button {
+    font-family: inherit; cursor: pointer; border: none; border-radius: var(--radius);
+    background: var(--panel-2); color: var(--text); padding: 8px 14px; font-size: 14px;
+    transition: background .15s;
+  }
+  button:hover { background: #2a2f3a; }
+  button.primary { background: var(--accent); color: #fff; }
+  button.primary:hover { background: var(--accent-hover); }
+  button.danger { background: var(--danger); color: #fff; }
+  button.danger:hover { background: var(--danger-hover); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  input[type=text], input[type=password], textarea {
+    font-family: inherit; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 14px;
+    width: 100%;
+  }
+  textarea { resize: vertical; }
+  label { display: block; font-size: 13px; color: var(--text-dim); margin: 14px 0 6px; }
+  a { color: var(--accent); }
+
+  /* ---- Config screen ---- */
+  #configScreen {
+    display: none;
+    min-height: 100%;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  #configScreen.visible { display: flex; }
+  .config-box {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px; max-width: 460px; width: 100%;
+  }
+  .config-box h1 { margin-top: 0; font-size: 22px; }
+  .config-box p.hint { color: var(--text-dim); font-size: 13px; line-height: 1.5; }
+  .config-actions { display: flex; gap: 10px; margin-top: 20px; }
+
+  /* ---- Main screen ---- */
+  #mainScreen { display: none; height: 100vh; flex-direction: column; }
+  #mainScreen.visible { display: flex; }
+
+  header {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  header h1 { font-size: 18px; margin: 0; margin-right: 8px; white-space: nowrap; }
+  .tabs { display: flex; gap: 6px; }
+  .tab-btn { background: transparent; }
+  .tab-btn.active { background: var(--accent); color: #fff; }
+  .spacer { flex: 1; }
+  #searchBox { max-width: 220px; }
+  .icon-btn { padding: 8px 10px; font-size: 16px; line-height: 1; }
+
+  .content-area { flex: 1; display: grid; grid-template-columns: 340px 1fr; overflow: hidden; }
+
+  #listPane { border-right: 1px solid var(--border); overflow-y: auto; background: var(--panel); }
+  .note-item {
+    padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 14px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .note-item:hover { background: var(--panel-2); }
+  .note-item.selected { background: var(--panel-2); border-left: 3px solid var(--accent); }
+  .note-item .note-name { word-break: break-all; }
+  .note-item .note-type { color: var(--text-dim); font-size: 11px; text-transform: uppercase; }
+  .empty-hint { padding: 20px 16px; color: var(--text-dim); font-size: 14px; }
+
+  #detailPane { overflow-y: auto; padding: 20px; background: var(--bg); }
+  .detail-empty { color: var(--text-dim); padding: 40px; text-align: center; }
+  .detail-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .detail-header .name { font-weight: 600; word-break: break-all; flex: 1; min-width: 150px; }
+  .back-btn { display: none; }
+  #detailImage { max-width: 100%; border-radius: var(--radius); border: 1px solid var(--border); }
+  #detailText { width: 100%; min-height: 60vh; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .detail-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+
+  /* ---- Toasts ---- */
+  #toastContainer {
+    position: fixed; top: 16px; right: 16px; z-index: 1000;
+    display: flex; flex-direction: column; gap: 8px; max-width: 340px;
+  }
+  .toast {
+    padding: 12px 14px; border-radius: var(--radius); font-size: 13px; line-height: 1.4;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4); color: #fff;
+  }
+  .toast.error { background: var(--danger); }
+  .toast.success { background: var(--success); color: #062; }
+  .toast.info { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+
+  /* ---- New note modal ---- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    align-items: center; justify-content: center; z-index: 900; padding: 16px;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal-box {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px; max-width: 480px; width: 100%; max-height: 90vh; overflow-y: auto;
+  }
+  .modal-box h2 { margin-top: 0; font-size: 18px; }
+  .modal-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+
+  /* ---- Responsive: stack list/detail on narrow screens ---- */
+  @media (max-width: 760px) {
+    .content-area { grid-template-columns: 1fr; }
+    #listPane { display: block; }
+    #detailPane { display: none; }
+    .content-area.detail-open #listPane { display: none; }
+    .content-area.detail-open #detailPane { display: block; }
+    .back-btn { display: inline-block; }
+    header h1 { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="toastContainer"></div>
+
+<!-- ============ CONFIG SCREEN ============ -->
+<div id="configScreen">
+  <div class="config-box">
+    <h1>Notatnik — konfiguracja</h1>
+    <p class="hint">Podaj dane dostępu do repozytorium GitHub, w którym przechowywane są notatki. Token jest zapisywany wyłącznie lokalnie w przeglądarce (localStorage).</p>
+
+    <label for="cfgToken">Token dostępu GitHub (Personal Access Token)</label>
+    <input type="password" id="cfgToken" placeholder="ghp_... lub github_pat_...">
+
+    <label for="cfgRepo">Repozytorium (owner/repo)</label>
+    <input type="text" id="cfgRepo" placeholder="np. gbryk1/notatnik-html">
+
+    <label for="cfgBranch">Gałąź (branch)</label>
+    <input type="text" id="cfgBranch" placeholder="main" value="main">
+
+    <label for="cfgInbox">Folder skrzynki (inbox)</label>
+    <input type="text" id="cfgInbox" placeholder="inbox" value="inbox">
+
+    <label for="cfgArchive">Folder archiwum</label>
+    <input type="text" id="cfgArchive" placeholder="archiwum" value="archiwum">
+
+    <div class="config-actions">
+      <button class="primary" id="cfgSaveBtn">Zapisz i połącz</button>
+      <button id="cfgCancelBtn" style="display:none;">Anuluj</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MAIN SCREEN ============ -->
+<div id="mainScreen">
+  <header>
+    <h1>Notatnik</h1>
+    <div class="tabs">
+      <button class="tab-btn active" id="tabInbox">Do przejrzenia</button>
+      <button class="tab-btn" id="tabArchive">Zarchiwizowane</button>
+    </div>
+    <div class="spacer"></div>
+    <input type="text" id="searchBox" placeholder="Szukaj po nazwie pliku...">
+    <button class="icon-btn primary" id="addNoteBtn" title="Nowa notatka">+ Nowa</button>
+    <button class="icon-btn" id="refreshBtn" title="Odśwież">⟳</button>
+    <button class="icon-btn" id="settingsBtn" title="Ustawienia">⚙</button>
+  </header>
+
+  <div class="content-area" id="contentArea">
+    <div id="listPane">
+      <div class="empty-hint" id="listEmptyHint">Ładowanie...</div>
+    </div>
+    <div id="detailPane">
+      <div class="detail-empty" id="detailEmpty">Wybierz notatkę z listy, aby zobaczyć szczegóły.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ NEW NOTE MODAL ============ -->
+<div class="modal-overlay" id="newNoteOverlay">
+  <div class="modal-box">
+    <h2>Nowa notatka</h2>
+    <div class="modal-tabs">
+      <button class="tab-btn active" id="newTabText">Tekst</button>
+      <button class="tab-btn" id="newTabImage">Obraz</button>
+    </div>
+
+    <div id="newTextForm">
+      <label for="newNoteTitle">Tytuł</label>
+      <input type="text" id="newNoteTitle" placeholder="Tytuł notatki (opcjonalnie)">
+      <label for="newNoteBody">Treść</label>
+      <textarea id="newNoteBody" rows="8" placeholder="Treść notatki..."></textarea>
+    </div>
+
+    <div id="newImageForm" style="display:none;">
+      <label for="newImageTitle">Tytuł (opcjonalnie, użyty w nazwie pliku)</label>
+      <input type="text" id="newImageTitle" placeholder="np. zrzut-ekranu">
+      <label for="newImageFile">Plik obrazu</label>
+      <input type="file" id="newImageFile" accept="image/png,image/jpeg,image/gif,image/webp">
+    </div>
+
+    <div class="modal-actions">
+      <button id="newNoteCancelBtn">Anuluj</button>
+      <button class="primary" id="newNoteSaveBtn">Zapisz notatkę</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var CONFIG_KEY = "notatnik_config";
+  var IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "webp"];
+  var API_BASE = "https://api.github.com";
+
+  var state = {
+    config: null,
+    activeTab: "inbox", // "inbox" | "archive"
+    files: { inbox: [], archive: [] },
+    loaded: { inbox: false, archive: false },
+    selected: null, // { name, path, sha, folderKey, contentBase64, isImage, downloadUrl }
+    searchTerm: ""
+  };
+
+  // ---------------------------------------------------------------------
+  // Toasts
+  // ---------------------------------------------------------------------
+  function showToast(message, type) {
+    type = type || "error";
+    var container = document.getElementById("toastContainer");
+    var el = document.createElement("div");
+    el.className = "toast " + type;
+    el.textContent = message;
+    container.appendChild(el);
+    setTimeout(function () {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, type === "error" ? 7000 : 3500);
+  }
+
+  // ---------------------------------------------------------------------
+  // Config persistence
+  // ---------------------------------------------------------------------
+  function loadConfig() {
+    try {
+      var raw = localStorage.getItem(CONFIG_KEY);
+      if (!raw) return null;
+      var cfg = JSON.parse(raw);
+      if (!cfg.token || !cfg.repo) return null;
+      return cfg;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveConfig(cfg) {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
+  }
+
+  // ---------------------------------------------------------------------
+  // GitHub Contents API helpers
+  // ---------------------------------------------------------------------
+  function apiHeaders() {
+    return {
+      "Authorization": "token " + state.config.token,
+      "Accept": "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    };
+  }
+
+  function contentsUrl(path, query) {
+    var repo = state.config.repo;
+    var url = API_BASE + "/repos/" + repo + "/contents/" + path.split("/").map(encodeURIComponent).join("/");
+    var params = [];
+    if (query) {
+      Object.keys(query).forEach(function (k) {
+        params.push(encodeURIComponent(k) + "=" + encodeURIComponent(query[k]));
+      });
+    }
+    if (params.length) url += "?" + params.join("&");
+    return url;
+  }
+
+  function apiErrorMessage(status, body) {
+    var msg = (body && body.message) ? body.message : ("Błąd HTTP " + status);
+    if (status === 401) return "Błąd autoryzacji (401): sprawdź poprawność tokenu GitHub.";
+    if (status === 404) return "Nie znaleziono (404): " + msg;
+    if (status === 409) return "Konflikt (409): plik został zmieniony w innym miejscu. " + msg;
+    if (status === 422) return "Nieprawidłowe żądanie (422): " + msg;
+    return "Błąd GitHub API (" + status + "): " + msg;
+  }
+
+  function ghRequest(method, path, body, query) {
+    var url = contentsUrl(path, query);
+    var opts = { method: method, headers: apiHeaders() };
+    if (body !== undefined) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+    return fetch(url, opts).then(function (res) {
+      return res.text().then(function (text) {
+        var data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+        if (!res.ok) {
+          throw new Error(apiErrorMessage(res.status, data));
+        }
+        return data;
+      });
+    });
+  }
+
+  function testConnection(token, repo) {
+    var url = API_BASE + "/repos/" + repo;
+    return fetch(url, {
+      headers: {
+        "Authorization": "token " + token,
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+      }
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.text().then(function (text) {
+          var data = null;
+          try { data = JSON.parse(text); } catch (e) {}
+          throw new Error(apiErrorMessage(res.status, data));
+        });
+      }
+      return res.json();
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Base64 <-> UTF-8 helpers (GitHub Contents API uses base64 content)
+  // ---------------------------------------------------------------------
+  function b64DecodeUnicode(str) {
+    var clean = str.replace(/\n/g, "");
+    var binary = atob(clean);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+
+  function b64EncodeUnicode(str) {
+    var bytes = new TextEncoder().encode(str);
+    var binary = "";
+    for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+
+  // ---------------------------------------------------------------------
+  // Filename helpers
+  // ---------------------------------------------------------------------
+  var PL_MAP = {
+    "ą": "a", "ć": "c", "ę": "e", "ł": "l", "ń": "n",
+    "ó": "o", "ś": "s", "ź": "z", "ż": "z",
+    "Ą": "a", "Ć": "c", "Ę": "e", "Ł": "l", "Ń": "n",
+    "Ó": "o", "Ś": "s", "Ź": "z", "Ż": "z"
+  };
+
+  function slugify(text) {
+    if (!text) return "";
+    var out = "";
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      out += PL_MAP[ch] !== undefined ? PL_MAP[ch] : ch;
+    }
+    out = out.toLowerCase()
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60);
+    return out;
+  }
+
+  function isoTimestamp() {
+    return new Date().toISOString().replace(/\.\d{3}Z$/, "").replace(/:/g, "-");
+  }
+
+  function buildFilename(title, ext) {
+    var base = isoTimestamp();
+    var slug = slugify(title);
+    if (slug) base += "--" + slug;
+    return base + "." + ext;
+  }
+
+  function extOf(name) {
+    var m = /\.([a-zA-Z0-9]+)$/.exec(name);
+    return m ? m[1].toLowerCase() : "";
+  }
+
+  function isImageExt(ext) {
+    return IMAGE_EXTS.indexOf(ext) !== -1;
+  }
+
+  // ---------------------------------------------------------------------
+  // Config screen wiring
+  // ---------------------------------------------------------------------
+  var configScreenEl = document.getElementById("configScreen");
+  var mainScreenEl = document.getElementById("mainScreen");
+
+  function showConfigScreen(allowCancel) {
+    document.getElementById("cfgCancelBtn").style.display = allowCancel ? "inline-block" : "none";
+    if (state.config) {
+      document.getElementById("cfgToken").value = state.config.token || "";
+      document.getElementById("cfgRepo").value = state.config.repo || "";
+      document.getElementById("cfgBranch").value = state.config.branch || "main";
+      document.getElementById("cfgInbox").value = state.config.inboxFolder || "inbox";
+      document.getElementById("cfgArchive").value = state.config.archiveFolder || "archiwum";
+    }
+    configScreenEl.classList.add("visible");
+    mainScreenEl.classList.remove("visible");
+  }
+
+  function showMainScreen() {
+    configScreenEl.classList.remove("visible");
+    mainScreenEl.classList.add("visible");
+  }
+
+  document.getElementById("cfgSaveBtn").addEventListener("click", function () {
+    var token = document.getElementById("cfgToken").value.trim();
+    var repo = document.getElementById("cfgRepo").value.trim();
+    var branch = document.getElementById("cfgBranch").value.trim() || "main";
+    var inboxFolder = document.getElementById("cfgInbox").value.trim() || "inbox";
+    var archiveFolder = document.getElementById("cfgArchive").value.trim() || "archiwum";
+
+    if (!token || !repo || repo.indexOf("/") === -1) {
+      showToast("Podaj token oraz repozytorium w formacie owner/repo.", "error");
+      return;
+    }
+
+    var btn = document.getElementById("cfgSaveBtn");
+    btn.disabled = true;
+    btn.textContent = "Łączenie...";
+
+    testConnection(token, repo).then(function () {
+      var cfg = { token: token, repo: repo, branch: branch, inboxFolder: inboxFolder, archiveFolder: archiveFolder };
+      saveConfig(cfg);
+      state.config = cfg;
+      state.loaded.inbox = false;
+      state.loaded.archive = false;
+      showToast("Połączono z repozytorium " + repo + ".", "success");
+      showMainScreen();
+      loadActiveTab();
+    }).catch(function (err) {
+      showToast(err.message, "error");
+    }).finally(function () {
+      btn.disabled = false;
+      btn.textContent = "Zapisz i połącz";
+    });
+  });
+
+  document.getElementById("cfgCancelBtn").addEventListener("click", function () {
+    if (state.config) showMainScreen();
+  });
+
+  document.getElementById("settingsBtn").addEventListener("click", function () {
+    showConfigScreen(true);
+  });
+
+  // ---------------------------------------------------------------------
+  // Tabs
+  // ---------------------------------------------------------------------
+  var tabInboxBtn = document.getElementById("tabInbox");
+  var tabArchiveBtn = document.getElementById("tabArchive");
+
+  function setActiveTab(tab) {
+    state.activeTab = tab;
+    tabInboxBtn.classList.toggle("active", tab === "inbox");
+    tabArchiveBtn.classList.toggle("active", tab === "archive");
+    closeDetail();
+    loadActiveTab();
+  }
+
+  tabInboxBtn.addEventListener("click", function () { setActiveTab("inbox"); });
+  tabArchiveBtn.addEventListener("click", function () { setActiveTab("archive"); });
+
+  document.getElementById("refreshBtn").addEventListener("click", function () {
+    state.loaded[state.activeTab] = false;
+    loadActiveTab();
+  });
+
+  // ---------------------------------------------------------------------
+  // Search
+  // ---------------------------------------------------------------------
+  document.getElementById("searchBox").addEventListener("input", function (e) {
+    state.searchTerm = e.target.value.toLowerCase();
+    renderList();
+  });
+
+  // ---------------------------------------------------------------------
+  // Folder key -> actual folder name
+  // ---------------------------------------------------------------------
+  function folderName(key) {
+    return key === "inbox" ? state.config.inboxFolder : state.config.archiveFolder;
+  }
+
+  function otherFolderKey(key) {
+    return key === "inbox" ? "archive" : "inbox";
+  }
+
+  // ---------------------------------------------------------------------
+  // Loading file lists
+  // ---------------------------------------------------------------------
+  function loadActiveTab() {
+    var key = state.activeTab;
+    if (state.loaded[key]) {
+      renderList();
+      return;
+    }
+    var listEmptyHint = document.getElementById("listEmptyHint");
+    listEmptyHint.textContent = "Ładowanie...";
+    document.getElementById("listPane").innerHTML = "";
+    document.getElementById("listPane").appendChild(listEmptyHint);
+
+    ghRequest("GET", folderName(key), undefined, { ref: state.config.branch })
+      .then(function (data) {
+        var items = Array.isArray(data) ? data : [];
+        items = items.filter(function (it) {
+          return it.type === "file" && it.name !== ".gitkeep";
+        });
+        items.sort(function (a, b) { return a.name < b.name ? 1 : -1; }); // newest first (ISO prefix)
+        state.files[key] = items;
+        state.loaded[key] = true;
+        renderList();
+      })
+      .catch(function (err) {
+        showToast(err.message, "error");
+        listEmptyHint.textContent = "Nie udało się wczytać listy notatek.";
+      });
+  }
+
+  // ---------------------------------------------------------------------
+  // Rendering the list
+  // ---------------------------------------------------------------------
+  function renderList() {
+    var pane = document.getElementById("listPane");
+    var key = state.activeTab;
+    var items = state.files[key] || [];
+    var term = state.searchTerm;
+    if (term) {
+      items = items.filter(function (it) { return it.name.toLowerCase().indexOf(term) !== -1; });
+    }
+
+    pane.innerHTML = "";
+
+    if (items.length === 0) {
+      var hint = document.createElement("div");
+      hint.className = "empty-hint";
+      hint.textContent = term ? "Brak wyników wyszukiwania." : "Brak notatek w tym folderze.";
+      pane.appendChild(hint);
+      return;
+    }
+
+    items.forEach(function (item) {
+      var el = document.createElement("div");
+      el.className = "note-item";
+      if (state.selected && state.selected.path === item.path) el.classList.add("selected");
+
+      var nameEl = document.createElement("div");
+      nameEl.className = "note-name";
+      nameEl.textContent = item.name;
+
+      var typeEl = document.createElement("div");
+      typeEl.className = "note-type";
+      var ext = extOf(item.name);
+      typeEl.textContent = isImageExt(ext) ? "Obraz" : "Tekst";
+
+      el.appendChild(nameEl);
+      el.appendChild(typeEl);
+      el.addEventListener("click", function () { selectFile(item); });
+      pane.appendChild(el);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Selecting & showing a file
+  // ---------------------------------------------------------------------
+  var contentArea = document.getElementById("contentArea");
+
+  function openDetail() {
+    contentArea.classList.add("detail-open");
+  }
+
+  function closeDetail() {
+    contentArea.classList.remove("detail-open");
+    state.selected = null;
+    renderDetailEmpty();
+    renderList();
+  }
+
+  function renderDetailEmpty() {
+    var pane = document.getElementById("detailPane");
+    pane.innerHTML = "";
+    var empty = document.createElement("div");
+    empty.className = "detail-empty";
+    empty.textContent = "Wybierz notatkę z listy, aby zobaczyć szczegóły.";
+    pane.appendChild(empty);
+  }
+
+  function selectFile(item) {
+    var key = state.activeTab;
+    var ext = extOf(item.name);
+    var isImage = isImageExt(ext);
+
+    var pane = document.getElementById("detailPane");
+    pane.innerHTML = "<div class=\"detail-empty\">Ładowanie notatki...</div>";
+    openDetail();
+    renderList();
+
+    ghRequest("GET", item.path, undefined, { ref: state.config.branch })
+      .then(function (data) {
+        state.selected = {
+          name: item.name,
+          path: item.path,
+          sha: data.sha,
+          folderKey: key,
+          isImage: isImage,
+          contentBase64: data.content,
+          downloadUrl: item.download_url
+        };
+        renderDetail();
+        renderList();
+      })
+      .catch(function (err) {
+        showToast(err.message, "error");
+        pane.innerHTML = "<div class=\"detail-empty\">Nie udało się wczytać notatki.</div>";
+      });
+  }
+
+  function renderDetail() {
+    var pane = document.getElementById("detailPane");
+    pane.innerHTML = "";
+    var sel = state.selected;
+    if (!sel) { renderDetailEmpty(); return; }
+
+    var header = document.createElement("div");
+    header.className = "detail-header";
+
+    var backBtn = document.createElement("button");
+    backBtn.className = "back-btn";
+    backBtn.textContent = "← Lista";
+    backBtn.addEventListener("click", closeDetail);
+    header.appendChild(backBtn);
+
+    var nameEl = document.createElement("div");
+    nameEl.className = "name";
+    nameEl.textContent = sel.name;
+    header.appendChild(nameEl);
+
+    pane.appendChild(header);
+
+    if (sel.isImage) {
+      var img = document.createElement("img");
+      img.id = "detailImage";
+      img.alt = sel.name;
+      img.src = "data:image/" + (extOf(sel.name) === "jpg" ? "jpeg" : extOf(sel.name)) + ";base64," + sel.contentBase64.replace(/\n/g, "");
+      pane.appendChild(img);
+    } else {
+      var textarea = document.createElement("textarea");
+      textarea.id = "detailText";
+      try {
+        textarea.value = b64DecodeUnicode(sel.contentBase64);
+      } catch (e) {
+        textarea.value = "";
+        showToast("Nie udało się zdekodować treści pliku.", "error");
+      }
+      pane.appendChild(textarea);
+    }
+
+    var actions = document.createElement("div");
+    actions.className = "detail-actions";
+
+    if (!sel.isImage) {
+      var saveBtn = document.createElement("button");
+      saveBtn.className = "primary";
+      saveBtn.textContent = "Zapisz zmiany";
+      saveBtn.addEventListener("click", saveTextEdits);
+      actions.appendChild(saveBtn);
+    }
+
+    var moveBtn = document.createElement("button");
+    moveBtn.textContent = sel.folderKey === "inbox" ? "Archiwizuj notatkę" : "Przywróć do skrzynki";
+    moveBtn.addEventListener("click", moveSelected);
+    actions.appendChild(moveBtn);
+
+    var deleteBtn = document.createElement("button");
+    deleteBtn.className = "danger";
+    deleteBtn.textContent = "Usuń trwale";
+    deleteBtn.addEventListener("click", deleteSelected);
+    actions.appendChild(deleteBtn);
+
+    pane.appendChild(actions);
+  }
+
+  // ---------------------------------------------------------------------
+  // Actions: save / move / delete
+  // ---------------------------------------------------------------------
+  function setBusy(isBusy) {
+    var buttons = document.querySelectorAll("#detailPane button, header button");
+    buttons.forEach(function (b) { b.disabled = isBusy; });
+  }
+
+  function saveTextEdits() {
+    var sel = state.selected;
+    if (!sel) return;
+    var textarea = document.getElementById("detailText");
+    var newContent = textarea.value;
+
+    setBusy(true);
+    ghRequest("PUT", sel.path, {
+      message: "Edycja notatki: " + sel.name,
+      content: b64EncodeUnicode(newContent),
+      sha: sel.sha,
+      branch: state.config.branch
+    }).then(function (data) {
+      sel.sha = data.content.sha;
+      sel.contentBase64 = b64EncodeUnicode(newContent);
+      showToast("Zapisano zmiany.", "success");
+    }).catch(function (err) {
+      showToast(err.message, "error");
+    }).finally(function () {
+      setBusy(false);
+    });
+  }
+
+  function moveSelected() {
+    var sel = state.selected;
+    if (!sel) return;
+    var targetKey = otherFolderKey(sel.folderKey);
+    var newPath = folderName(targetKey) + "/" + sel.name;
+    var actionLabel = targetKey === "archive" ? "Archiwizacja notatki: " : "Przywrócenie notatki: ";
+
+    setBusy(true);
+    ghRequest("PUT", newPath, {
+      message: actionLabel + sel.name,
+      content: sel.contentBase64,
+      branch: state.config.branch
+    }).then(function () {
+      return ghRequest("DELETE", sel.path, {
+        message: "Usunięcie po przeniesieniu: " + sel.name,
+        sha: sel.sha,
+        branch: state.config.branch
+      });
+    }).then(function () {
+      showToast(targetKey === "archive" ? "Zarchiwizowano notatkę." : "Przywrócono notatkę do skrzynki.", "success");
+      state.loaded.inbox = false;
+      state.loaded.archive = false;
+      closeDetail();
+      loadActiveTab();
+    }).catch(function (err) {
+      showToast(err.message, "error");
+    }).finally(function () {
+      setBusy(false);
+    });
+  }
+
+  function deleteSelected() {
+    var sel = state.selected;
+    if (!sel) return;
+    var confirmed = window.confirm("Czy na pewno chcesz trwale usunąć notatkę \"" + sel.name + "\"? Tej operacji nie można cofnąć.");
+    if (!confirmed) return;
+
+    setBusy(true);
+    ghRequest("DELETE", sel.path, {
+      message: "Usunięcie notatki: " + sel.name,
+      sha: sel.sha,
+      branch: state.config.branch
+    }).then(function () {
+      showToast("Notatka została usunięta.", "success");
+      state.loaded[sel.folderKey] = false;
+      closeDetail();
+      loadActiveTab();
+    }).catch(function (err) {
+      showToast(err.message, "error");
+    }).finally(function () {
+      setBusy(false);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // New note modal
+  // ---------------------------------------------------------------------
+  var newNoteOverlay = document.getElementById("newNoteOverlay");
+  var newTabText = document.getElementById("newTabText");
+  var newTabImage = document.getElementById("newTabImage");
+  var newTextForm = document.getElementById("newTextForm");
+  var newImageForm = document.getElementById("newImageForm");
+  var newNoteMode = "text";
+
+  document.getElementById("addNoteBtn").addEventListener("click", function () {
+    document.getElementById("newNoteTitle").value = "";
+    document.getElementById("newNoteBody").value = "";
+    document.getElementById("newImageTitle").value = "";
+    document.getElementById("newImageFile").value = "";
+    setNewNoteMode("text");
+    newNoteOverlay.classList.add("visible");
+  });
+
+  document.getElementById("newNoteCancelBtn").addEventListener("click", function () {
+    newNoteOverlay.classList.remove("visible");
+  });
+
+  newNoteOverlay.addEventListener("click", function (e) {
+    if (e.target === newNoteOverlay) newNoteOverlay.classList.remove("visible");
+  });
+
+  function setNewNoteMode(mode) {
+    newNoteMode = mode;
+    newTabText.classList.toggle("active", mode === "text");
+    newTabImage.classList.toggle("active", mode === "image");
+    newTextForm.style.display = mode === "text" ? "block" : "none";
+    newImageForm.style.display = mode === "image" ? "block" : "none";
+  }
+
+  newTabText.addEventListener("click", function () { setNewNoteMode("text"); });
+  newTabImage.addEventListener("click", function () { setNewNoteMode("image"); });
+
+  document.getElementById("newNoteSaveBtn").addEventListener("click", function () {
+    if (newNoteMode === "text") {
+      createTextNote();
+    } else {
+      createImageNote();
+    }
+  });
+
+  function createTextNote() {
+    var title = document.getElementById("newNoteTitle").value.trim();
+    var body = document.getElementById("newNoteBody").value;
+
+    if (!title && !body.trim()) {
+      showToast("Podaj tytuł lub treść notatki.", "error");
+      return;
+    }
+
+    var filename = buildFilename(title, "md");
+    var content = title ? ("# " + title + "\n\n" + body) : body;
+    var path = state.config.inboxFolder + "/" + filename;
+
+    var btn = document.getElementById("newNoteSaveBtn");
+    btn.disabled = true;
+
+    ghRequest("PUT", path, {
+      message: "Nowa notatka: " + filename,
+      content: b64EncodeUnicode(content),
+      branch: state.config.branch
+    }).then(function () {
+      showToast("Dodano nową notatkę.", "success");
+      newNoteOverlay.classList.remove("visible");
+      state.loaded.inbox = false;
+      setActiveTab("inbox");
+    }).catch(function (err) {
+      showToast(err.message, "error");
+    }).finally(function () {
+      btn.disabled = false;
+    });
+  }
+
+  function createImageNote() {
+    var title = document.getElementById("newImageTitle").value.trim();
+    var fileInput = document.getElementById("newImageFile");
+    var file = fileInput.files && fileInput.files[0];
+
+    if (!file) {
+      showToast("Wybierz plik obrazu do dodania.", "error");
+      return;
+    }
+
+    var ext = extOf(file.name) || "png";
+    if (!isImageExt(ext)) ext = "png";
+    var filename = buildFilename(title, ext);
+    var path = state.config.inboxFolder + "/" + filename;
+
+    var btn = document.getElementById("newNoteSaveBtn");
+    btn.disabled = true;
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      var dataUrl = reader.result;
+      var base64 = dataUrl.split(",")[1];
+
+      ghRequest("PUT", path, {
+        message: "Nowa notatka (obraz): " + filename,
+        content: base64,
+        branch: state.config.branch
+      }).then(function () {
+        showToast("Dodano nową notatkę graficzną.", "success");
+        newNoteOverlay.classList.remove("visible");
+        state.loaded.inbox = false;
+        setActiveTab("inbox");
+      }).catch(function (err) {
+        showToast(err.message, "error");
+      }).finally(function () {
+        btn.disabled = false;
+      });
+    };
+    reader.onerror = function () {
+      showToast("Nie udało się odczytać pliku.", "error");
+      btn.disabled = false;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // ---------------------------------------------------------------------
+  // Bootstrap
+  // ---------------------------------------------------------------------
+  function init() {
+    state.config = loadConfig();
+    if (state.config) {
+      showMainScreen();
+      loadActiveTab();
+    } else {
+      showConfigScreen(false);
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
